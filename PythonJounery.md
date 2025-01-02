@@ -2,7 +2,7 @@
 
 ## Overview of Python
 
-Python is a high-level, versatile, and dynamically typed programming language. It was created by Guido van Rossum and first released in 1991. Python emphasizes code readability and simplicity, making it an excellent choice for beginners and professionals alike.
+Python is a high-level, versatile, and dynamically typed programming language. It was created by **`Guido van Rossum`** and first released in **1991**. Python emphasizes code readability and simplicity, making it an excellent choice for beginners and professionals alike.
 
 ### 3 Core feature of Python Language:
 
