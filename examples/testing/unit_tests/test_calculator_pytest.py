@@ -63,7 +63,7 @@ class TestCalculatorPytest:
         assert self.calc.square_root(9) == 3
         assert self.calc.square_root(16) == 4
         assert self.calc.square_root(0) == 0
-        assert abs(self.calc.square_root(2) - 1.414) < 0.001
+        assert self.calc.square_root(2) == pytest.approx(1.414, abs=0.001)
 
     def test_square_root_negative(self):
         """Test square root of negative number raises ValueError."""
