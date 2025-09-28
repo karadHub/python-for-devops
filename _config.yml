@@ -1,0 +1,128 @@
+# Jekyll Configuration for Python for DevOps Repository
+
+# Site settings
+title: Python for DevOps
+description: >-
+  A comprehensive course designed to equip you with essential Python skills
+  tailored for DevOps practices. Learn automation, testing, CI/CD, and more.
+baseurl: "/python-for-devops"
+url: "https://karadhub.github.io"
+
+# GitHub repository
+repository: karadHub/python-for-devops
+github_username: karadHub
+
+# Build settings
+markdown: kramdown
+highlighter: rouge
+theme: minima
+
+# Plugins
+plugins:
+  - jekyll-feed
+  - jekyll-sitemap
+  - jekyll-seo-tag
+  - jekyll-relative-links
+
+# Relative links settings
+relative_links:
+  enabled: true
+  collections: false
+
+# Code highlighting
+kramdown:
+  syntax_highlighter: rouge
+  syntax_highlighter_opts:
+    block:
+      line_numbers: true
+
+# Collections
+collections:
+  fundamentals:
+    output: true
+    permalink: /:collection/:name/
+  intermediate:
+    output: true
+    permalink: /:collection/:name/
+  examples:
+    output: true
+    permalink: /:collection/:path/
+
+# Navigation
+header_pages:
+  - README.md
+  - PythonJourney.md
+  - Fundamental/basic_python.md
+  - Intermediate/testing_fundamentals.md
+
+# Exclude from processing
+exclude:
+  - .gitignore
+  - .gitattributes
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor/bundle/
+  - vendor/cache/
+  - vendor/gems/
+  - vendor/ruby/
+  - examples/testing/automation_scripts/
+  - "*.pyc"
+  - __pycache__/
+  - .pytest_cache/
+  - htmlcov/
+  - .coverage
+
+# Include additional files
+include:
+  - .htaccess
+  - _pages
+
+# Sass/SCSS settings
+sass:
+  sass_dir: _sass
+  style: compressed
+
+# Pagination
+paginate: 10
+paginate_path: "/page:num/"
+
+# SEO settings
+lang: en_US
+author: karadHub
+twitter:
+  username: karadHub
+
+# Social links
+social:
+  - platform: github
+    user_url: "https://github.com/karadHub"
+  - platform: linkedin
+    user_url: "https://linkedin.com/in/your-profile"
+
+# Google Analytics (optional)
+# google_analytics: UA-XXXXXXXX-X
+
+# Defaults
+defaults:
+  - scope:
+      path: ""
+      type: "posts"
+    values:
+      layout: "post"
+      author: "karadHub"
+  - scope:
+      path: "Fundamental"
+    values:
+      layout: "page"
+      category: "fundamental"
+  - scope:
+      path: "Intermediate"
+    values:
+      layout: "page"
+      category: "intermediate"
+  - scope:
+      path: "examples"
+    values:
+      layout: "page"
+      category: "examples"
