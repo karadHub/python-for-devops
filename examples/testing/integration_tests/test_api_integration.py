@@ -267,7 +267,7 @@ class TestDevOpsAPIClientErrorHandling:
         with requests_mock.Mocker() as m:
             m.get(requests_mock.ANY, text="Invalid JSON response")
 
-            with pytest.raises(requests.exceptions.JSONDecodeError):
+            with pytest.raises(json.JSONDecodeError):
                 self.client.get_server_status("server-001")
 
 class TestDevOpsAPIClientAuthentication:
