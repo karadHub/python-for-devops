@@ -1,0 +1,389 @@
+# GitHub Actions Workflow for Python Testing
+# This is a LEARNING EXAMPLE, not meant to be copied directly to .github/workflows/
+# It demonstrates complete CI/CD pipeline patterns for educational purposes
+
+name: Python Testing Pipeline
+
+# Trigger the workflow on push and pull requests
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+# Environment variables
+env:
+  PYTHON_VERSION: 3.11
+
+jobs:
+  # Job 1: Code Quality Checks
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install linting tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort mypy
+
+      - name: Check code formatting with Black
+        run: |
+          black --check --diff .
+
+      - name: Check import sorting with isort
+        run: |
+          isort --check-only --diff .
+
+      - name: Lint with flake8
+        run: |
+          # Stop the build if there are Python syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Treat all other errors as warnings
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+
+      - name: Type check with mypy (optional)
+        run: |
+          mypy . --ignore-missing-imports || true
+
+  # Job 2: Unit Tests
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: code-quality
+
+    strategy:
+      matrix:
+        python-version: [3.8, 3.9, 3.10, 3.11]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-${{ matrix.python-version }}-
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov pytest-mock coverage
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-test.txt ]; then pip install -r requirements-test.txt; fi
+
+      - name: Run unit tests
+        run: |
+          pytest examples/testing/unit_tests/ \
+            --cov=examples \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-fail-under=80 \
+            --junitxml=pytest-results-${{ matrix.python-version }}.xml \
+            -v
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        if: matrix.python-version == '3.11'
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: pytest-results-${{ matrix.python-version }}
+          path: pytest-results-${{ matrix.python-version }}.xml
+
+  # Job 3: Integration Tests
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+
+    services:
+      # PostgreSQL service for database integration tests
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      # Redis service for cache integration tests
+      redis:
+        image: redis:6
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-mock requests-mock psycopg2-binary redis
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-test.txt ]; then pip install -r requirements-test.txt; fi
+
+      - name: Wait for services to be ready
+        run: |
+          # Wait for PostgreSQL
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+
+          # Wait for Redis
+          until redis-cli -h localhost -p 6379 ping; do
+            echo "Waiting for Redis..."
+            sleep 2
+          done
+
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          REDIS_URL: redis://localhost:6379/0
+        run: |
+          pytest examples/testing/integration_tests/ \
+            -m "not slow" \
+            --tb=short \
+            -v
+
+  # Job 4: Security Scanning
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: code-quality
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install security tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install safety bandit[toml]
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run Safety check for known vulnerabilities
+        run: |
+          safety check --json --output safety-report.json || true
+
+      - name: Run Bandit security linter
+        run: |
+          bandit -r . -f json -o bandit-report.json || true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            safety-report.json
+            bandit-report.json
+
+  # Job 5: Build and Test Docker Container (if Dockerfile exists)
+  docker-test:
+    name: Docker Build Test
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check if Dockerfile exists
+        id: check_dockerfile
+        run: |
+          if [ -f Dockerfile ]; then
+            echo "dockerfile_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "dockerfile_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.check_dockerfile.outputs.dockerfile_exists == 'true'
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build Docker image
+        if: steps.check_dockerfile.outputs.dockerfile_exists == 'true'
+        run: |
+          docker build -t python-devops:${{ github.sha }} .
+
+      - name: Test Docker container
+        if: steps.check_dockerfile.outputs.dockerfile_exists == 'true'
+        run: |
+          # Run container and test basic functionality
+          docker run --rm python-devops:${{ github.sha }} python --version
+
+  # Job 6: Performance Tests (runs on main branch only)
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-benchmark
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run performance tests
+        run: |
+          # Run any performance/benchmark tests if they exist
+          pytest -m "performance or benchmark" --benchmark-only || echo "No performance tests found"
+
+  # Job 7: Generate Test Report
+  test-report:
+    name: Generate Test Report
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, security-scan]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Generate comprehensive test report
+        run: |
+          echo "# Test Report" > TEST_REPORT.md
+          echo "Generated on: $(date)" >> TEST_REPORT.md
+          echo "" >> TEST_REPORT.md
+
+          # Check job statuses and add to report
+          echo "## Job Results" >> TEST_REPORT.md
+          echo "- Code Quality: ${{ needs.code-quality.result }}" >> TEST_REPORT.md
+          echo "- Unit Tests: ${{ needs.unit-tests.result }}" >> TEST_REPORT.md
+          echo "- Integration Tests: ${{ needs.integration-tests.result }}" >> TEST_REPORT.md
+          echo "- Security Scan: ${{ needs.security-scan.result }}" >> TEST_REPORT.md
+
+          # Add artifact information if available
+          if [ -d "security-reports" ]; then
+            echo "" >> TEST_REPORT.md
+            echo "## Security Reports Available" >> TEST_REPORT.md
+            ls security-reports/ >> TEST_REPORT.md
+          fi
+
+      - name: Upload test report
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-report
+          path: TEST_REPORT.md
+
+      - name: Comment PR with test results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            if (fs.existsSync('TEST_REPORT.md')) {
+              const testReport = fs.readFileSync('TEST_REPORT.md', 'utf8');
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: '## 🧪 Test Results\n\n' + testReport
+              });
+            }
+
+  # Job 8: Deploy to Staging (main branch only, all tests pass)
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, security-scan, docker-test]
+    if: |
+      github.ref == 'refs/heads/main' &&
+      needs.unit-tests.result == 'success' &&
+      needs.integration-tests.result == 'success' &&
+      needs.security-scan.result == 'success'
+
+    environment:
+      name: staging
+      url: https://staging.example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        run: |
+          echo "🚀 Deploying to staging environment..."
+          # Add your deployment commands here
+          echo "Deployment completed successfully!"
+
+      - name: Run smoke tests against staging
+        run: |
+          echo "🧪 Running smoke tests against staging..."
+          # Add smoke tests here
+          curl -f https://staging.example.com/health || exit 1
+          echo "✅ Smoke tests passed!"
+
+      - name: Notify deployment success
+        run: |
+          echo "✅ Successfully deployed to staging!"
+          echo "🔗 Staging URL: https://staging.example.com"
