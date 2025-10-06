@@ -1,14 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
 *.md linguist-detectable=true
-*.sh linguist-language=Shell
-*.py linguist-language=Python
 *.yaml linguist-language=YAML
-*.yml linguist-language=YAML
-*.ini linguist-language=INI
-*.json linguist-language=JSON
-*.xml linguist-language=XML
-*.html linguist-language=HTML
-*.css linguist-language=CSS
-*.js linguist-language=JavaScript
-*.ts linguist-language=TypeScript
+*.py linguist-language=Python
